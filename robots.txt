@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://chlanstjr3-collab.github.io/madepick/sitemap.xml
