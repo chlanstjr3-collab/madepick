@@ -36,7 +36,7 @@ const NAMES = {
     loading:"불러오는 중…",generalError:"데이터를 불러오지 못했습니다. Supabase 설정과 SQL 적용 상태를 확인해 주세요.",
     ownerNoReview:"본인이 등록한 작품에는 별점 리뷰를 남길 수 없습니다.",confirmUsed:"직접 사용해본 경험으로 작성합니다.",
     filter:"필터",browse:"작품",profileSave:"이름 변경",loginLoading:"로그인 확인 중…",by:"작성",
-    caution:"베타 서비스 · 새로 등록된 링크를 열 때는 안전 여부를 확인해 주세요."},
+    admin:"관리자",pendingReports:"처리되지 않은 신고",resolve:"처리 완료",hideAndResolve:"게시물 숨기고 처리",removeAndResolve:"댓글/리뷰 삭제 후 처리",noReports:"처리할 신고가 없습니다.",moderationConfirm:"신고된 콘텐츠를 제한하고 처리 완료할까요?",caution:"베타 서비스 · 새로 등록된 링크를 열 때는 안전 여부를 확인해 주세요."},
   en: {home:"Home",requests:"Request",build:"Build",showcase:"Showcase",rankings:"Rankings",profile:"My account",signIn:"Sign in with Google",signOut:"Sign out",
     request:"Request",product:"Product",idea:"Wish a service existed?",viewProducts:"Explore products",submitIdea:"Post an idea",submitProduct:"Show your product",
     intro:"Request useful apps, volunteer to build ideas, and show your completed projects to the world.",
@@ -65,13 +65,13 @@ const NAMES = {
     loading:"Loading…",generalError:"Could not load data. Check Supabase configuration and migration.",
     ownerNoReview:"You cannot review your own product.",confirmUsed:"I have personally used this product.",
     filter:"Filter",browse:"Browse",profileSave:"Update name",loginLoading:"Checking account…",by:"By",
-    caution:"Beta · Check unfamiliar external links before opening."}
+    admin:"Moderation",pendingReports:"Pending reports",resolve:"Mark resolved",hideAndResolve:"Hide post and resolve",removeAndResolve:"Remove comment/review and resolve",noReports:"No pending reports.",moderationConfirm:"Moderate this item and resolve the report?",caution:"Beta · Check unfamiliar external links before opening."}
 };
 const CAT = {ko:{all:"전체",ai:"AI",productivity:"생산성",finance:"금융",game:"게임",education:"교육",other:"기타"},
   en:{all:"All",ai:"AI",productivity:"Productivity",finance:"Finance",game:"Games",education:"Education",other:"Other"}};
 const state = {
   lang: localStorage.getItem("madepick-lang") === "en" ? "en":"ko",
-  ready:false, user:null, profile:null, error:"",
+  ready:false, user:null, profile:null, isModerator:false, reports:[], error:"",
   requests:[], products:[], profiles:[],participations:[], reqMetrics:[], productMetrics:[],
   userReqVotes:[],userProductVotes:[],comments:[],reviews:[],
   search:"",category:"all",order:"popular",period:"all"
@@ -91,7 +91,7 @@ function page(){const parts=location.hash.replace(/^#\/?/,"").split("/");return 
 function go(path){location.hash="#/"+path; if(page().name===path.split("/")[0])render(); window.scrollTo(0,0);}
 function navigate(name){state.search="";state.category="all";state.order="popular";state.period="all";go(name);}
 
-function nav(){const p=page();const tabs=["home","requests","build","showcase","rankings"];
+function nav(){const p=page();const tabs=["home","requests","build","showcase","rankings"].concat(state.isModerator?["admin"]:[]);
   $("#topnav").innerHTML=tabs.map(x=>'<button data-action="go" data-path="'+x+'" class="'+((p.name===x||p.name==="product"&&x==="showcase")?"active":"")+'">'+esc(tr(x))+'</button>').join("");
   $("#mobileNav").innerHTML=["home","requests","build","showcase"].map((x,i)=>'<button class="'+(p.name===x?"active":"")+'" data-action="go" data-path="'+x+'">'+["⌂ ","💡 ","🛠 ","🚀 "][i]+esc(tr(x))+'</button>').join("");
   $("#authzone").innerHTML = '<button class="ghost" data-action="lang">'+(state.lang==="ko"?"EN":"KO")+' 🌐</button>'+
@@ -213,6 +213,35 @@ function profilePage(){if(!state.user)return '<div class="wrap content"><div cla
  '<div class="comment"><div class="row">'+stars(r.rating,false)+'<button class="ghost" data-action="detail" data-kind="product" data-id="'+r.product_id+'">'+
  esc(state.products.find(x=>x.id===r.product_id)?.title||tr("product"))+'</button></div><p>'+esc(r.body)+'</p></div>').join("")||'<p class="muted">'+tr("emptyMine")+'</p>')+'</div></section></div>';
 }
+function adminPage(){
+ if(!state.user||!state.isModerator)return '<div class="wrap content"><div class="notice error">'+tr("loginNeeded")+'</div></div>';
+ const reports=state.reports.filter(x=>x.status==="pending");
+ return '<div class="wrap content">'+topSection(tr("admin"),tr("pendingReports")+" ("+reports.length+")",null)+
+ (reports.length?'<div class="stack">'+reports.map(r=>{
+ const n=r.target_kind==="product"?state.products.find(x=>x.id===r.target_id)?.title:
+ r.target_kind==="request"?state.requests.find(x=>x.id===r.target_id)?.title:"";
+ return '<article class="pane"><div class="row space"><span class="pill">'+esc(r.target_kind)+'</span><span class="hint">'+date(r.created_at)+'</span></div>'+
+ '<h3>'+esc(n||r.target_kind+' '+r.target_id)+'</h3><p>'+esc(r.reason)+'</p><p class="hint">'+esc(who(r.reporter_id))+'</p><div class="row">'+
+ '<button class="btn tiny alt" data-action="moderate" data-mode="resolve" data-report="'+r.id+'" data-kind="'+r.target_kind+'" data-id="'+r.target_id+'">'+tr("resolve")+'</button>'+
+ '<button class="btn tiny danger" data-action="moderate" data-mode="restrict" data-report="'+r.id+'" data-kind="'+r.target_kind+'" data-id="'+r.target_id+'">'+
+ tr(r.target_kind==="request"||r.target_kind==="product"?"hideAndResolve":"removeAndResolve")+'</button></div></article>';
+ }).join("")+'</div>':'<div class="empty">'+tr("noReports")+'</div>')+'</div>';
+}
+async function moderatorAction(mode,kind,id,reportId){
+ if(!requireLogin()||!state.isModerator)return;
+ if(mode==="restrict"&&!confirm(tr("moderationConfirm")))return;
+ try{
+ if(mode==="restrict"){
+  const table=kind==="request"?"requests":kind==="product"?"products":kind==="comment"?"comments":"reviews";
+  const q=kind==="request"||kind==="product"?db.from(table).update({visibility:"hidden"}).eq("id",id):
+    db.from(table).delete().eq("id",id);
+  ensure(await q);
+ }
+ ensure(await db.from("reports").update({status:"resolved",resolved_at:new Date().toISOString(),resolved_by:state.user.id}).eq("id",reportId));
+ await fetchData();toast(tr("saved"));
+ }catch(e){showError(e);}
+}
+
 function render(){document.documentElement.lang=state.lang;nav();const p=page();const el=$("#app");
  document.title="MadePick · "+(p.name==="product"?state.products.find(x=>x.id===p.id)?.title||tr("showcase"):
  p.name==="request"?state.requests.find(x=>x.id===p.id)?.title||tr("requests"):tr(p.name));
@@ -221,6 +250,7 @@ function render(){document.documentElement.lang=state.lang;nav();const p=page();
  else if(["requests","build","showcase","rankings"].includes(p.name))el.innerHTML=listing(p.name);
  else if(p.name==="request"||p.name==="product")el.innerHTML=details(p.name,p.id);
  else if(p.name==="profile")el.innerHTML=profilePage();
+ else if(p.name==="admin")el.innerHTML=adminPage();
  else el.innerHTML=home();
 }
 async function fetchData(){if(!db){state.ready=true;render();return;}
@@ -237,12 +267,17 @@ async function fetchData(){if(!db){state.ready=true;render();return;}
  db.from("reviews").select("*").order("created_at",{ascending:false}).limit(1000),
  state.user?db.from("request_votes").select("request_id").eq("user_id",state.user.id):Promise.resolve({data:[]}),
  state.user?db.from("product_votes").select("product_id,value").eq("user_id",state.user.id):Promise.resolve({data:[]}),
- state.user?db.from("profiles").select("id,display_name").eq("id",state.user.id).maybeSingle():Promise.resolve({data:null})
+ state.user?db.from("profiles").select("id,display_name").eq("id",state.user.id).maybeSingle():Promise.resolve({data:null}),
+ state.user?db.from("moderators").select("user_id").eq("user_id",state.user.id).maybeSingle():Promise.resolve({data:null})
  ]);
  const error=queries.find(x=>x.error)?.error;if(error)throw error;
  [state.requests,state.products,state.profiles,state.participations,state.reqMetrics,state.productMetrics,state.comments,state.reviews,state.userReqVotes,state.userProductVotes]=
  queries.slice(0,10).map(x=>x.data||[]);
- state.profile=queries[10].data||null;state.error="";
+ state.profile=queries[10].data||null;
+ state.isModerator=!!queries[11].data;
+ if(state.isModerator){const q=await db.from("reports").select("*").order("created_at",{ascending:false}).limit(200);
+ if(q.error)throw q.error;state.reports=q.data||[];}else state.reports=[];
+ state.error="";
  }catch(e){state.error=String(e?.message||e);console.error("MadePick data error",e);}
  state.ready=true;render();
 }
@@ -327,6 +362,7 @@ async function handleClick(event){const target=event.target.closest("[data-actio
  if(a==="join")return join(id);
  if(a==="delete")return remove(kind,id);
  if(a==="report")return report(kind,id);
+ if(a==="moderate")return moderatorAction(target.dataset.mode,kind,id,target.dataset.report);
 }
 async function handleSubmit(event){const form=event.target;if(!["postForm","commentForm","reviewForm","profileForm","editCommentForm"].includes(form.id))return;
  event.preventDefault();const btn=form.querySelector('[type="submit"]');if(btn)btn.disabled=true;
