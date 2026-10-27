@@ -177,10 +177,26 @@ create policy "requests owner delete" on public.requests for delete to authentic
 create policy "products public read" on public.products for select to anon,authenticated
   using (visibility='published' or owner_id=(select auth.uid()) or public.is_moderator());
 create policy "products owner insert" on public.products for insert to authenticated
-  with check (owner_id=(select auth.uid()) and visibility='published');
+  with check (owner_id=(select auth.uid()) and visibility='published' and
+    (request_id is null or exists(
+      select 1 from public.requests req where req.id=request_id and
+      (req.owner_id=(select auth.uid()) or exists(
+        select 1 from public.build_participations b
+        where b.request_id=req.id and b.user_id=(select auth.uid())
+      ))
+    )));
 create policy "products owner edit" on public.products for update to authenticated
   using (owner_id=(select auth.uid()) or public.is_moderator())
-  with check (owner_id=(select auth.uid()) or public.is_moderator());
+  with check (public.is_moderator() or (
+    owner_id=(select auth.uid()) and
+    (request_id is null or exists(
+      select 1 from public.requests req where req.id=request_id and
+      (req.owner_id=(select auth.uid()) or exists(
+        select 1 from public.build_participations b
+        where b.request_id=req.id and b.user_id=(select auth.uid())
+      ))
+    ))
+  ));
 create policy "products owner delete" on public.products for delete to authenticated
   using (owner_id=(select auth.uid()) or public.is_moderator());
 
@@ -293,6 +309,57 @@ grant select,insert,update,delete on public.profiles,public.requests,public.prod
   public.comments,public.reviews to authenticated;
 grant select,insert on public.reports to authenticated;
 grant select on public.moderators to authenticated;
+
+
+-- Simple baseline abuse protection. Also add CAPTCHA/server rate limiting before broad launch.
+create or replace function public.guard_post_frequency()
+returns trigger language plpgsql security definer set search_path=''
+as $
+declare n integer := 0;
+begin
+  if tg_table_name='requests' then
+    select count(*) into n from public.requests
+    where owner_id=new.owner_id and created_at>now()-interval '1 hour';
+    if n>=8 then raise exception 'Request posting limit exceeded'; end if;
+  elsif tg_table_name='products' then
+    select count(*) into n from public.products
+    where owner_id=new.owner_id and created_at>now()-interval '1 hour';
+    if n>=8 then raise exception 'Product posting limit exceeded'; end if;
+  elsif tg_table_name='comments' then
+    select count(*) into n from public.comments
+    where author_id=new.author_id and created_at>now()-interval '1 hour';
+    if n>=35 then raise exception 'Comment posting limit exceeded'; end if;
+  elsif tg_table_name='reviews' then
+    select count(*) into n from public.reviews
+    where author_id=new.author_id and created_at>now()-interval '1 hour';
+    if n>=12 then raise exception 'Review posting limit exceeded'; end if;
+  elsif tg_table_name='reports' then
+    select count(*) into n from public.reports
+    where reporter_id=new.reporter_id and created_at>now()-interval '1 day';
+    if n>=20 then raise exception 'Report limit exceeded'; end if;
+  end if;
+  return new;
+end $;
+
+drop trigger if exists limit_request_creation on public.requests;
+create trigger limit_request_creation before insert on public.requests
+for each row execute function public.guard_post_frequency();
+
+drop trigger if exists limit_product_creation on public.products;
+create trigger limit_product_creation before insert on public.products
+for each row execute function public.guard_post_frequency();
+
+drop trigger if exists limit_comment_creation on public.comments;
+create trigger limit_comment_creation before insert on public.comments
+for each row execute function public.guard_post_frequency();
+
+drop trigger if exists limit_review_creation on public.reviews;
+create trigger limit_review_creation before insert on public.reviews
+for each row execute function public.guard_post_frequency();
+
+drop trigger if exists limit_report_creation on public.reports;
+create trigger limit_report_creation before insert on public.reports
+for each row execute function public.guard_post_frequency();
 
 -- Optional manual moderator assignment AFTER a Google sign-in:
 -- insert into public.moderators(user_id) values ('<auth user uuid>');
