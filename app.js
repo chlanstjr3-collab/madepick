@@ -22,7 +22,7 @@ const NAMES = {
     emptyExplain:"첫 번째 등록자가 되어주세요.",search:"제목·내용 검색",category:"모든 카테고리",latest:"최신순",popularSort:"인기순",period:"집계 기간",
     today:"24시간",week:"7일",month:"30일",allTime:"전체",noResults:"조건에 맞는 글이 없습니다.",loginNeeded:"이 기능을 사용하려면 Google 로그인이 필요합니다.",
     comment:"댓글",review:"사용 후기",comments:"댓글",reviews:"별점 리뷰",author:"작성자",title:"제목",description:"설명",website:"웹사이트 주소 (https://)",
-    urlHelp:"완성된 작품의 실제 주소를 입력하세요.",name:"이름",publish:"등록하기",save:"저장",cancel:"취소",edit:"수정",delete:"삭제",
+    urlHelp:"완성된 작품의 실제 주소를 입력하세요.",tagline:"짧은 홍보 문구",taglineHelp:"작품의 매력을 한 문장으로 알려주세요.",highlights:"주요 장점 · 기능",highlightsHelp:"한 줄에 한 가지씩 소개해주세요.",photos:"작품 소개 사진",photosHelp:"최대 5장 · 사진당 5MB 이하 · JPG / PNG / WEBP · 첫 번째 사진이 대표 이미지",removePhoto:"사진 삭제",photoMax:"사진은 최대 5장까지 선택할 수 있어요.",photoType:"JPG, PNG, WEBP 사진만 올릴 수 있어요.",photoSize:"사진 한 장은 5MB를 넘을 수 없어요.",features:"주요 기능과 장점",promoDescription:"작품 상세 소개",name:"이름",publish:"등록하기",save:"저장",cancel:"취소",edit:"수정",delete:"삭제",
     confirmDelete:"정말 삭제할까요? 되돌릴 수 없습니다.",details:"자세히 보기",vote:"나도 필요해요",up:"추천",down:"비추천",
     join:"제작 참여하기",leave:"참여 취소",participants:"참여한 제작자",status:"진행 상태",open:"요청 중",building:"제작 중",completed:"완료",
     progress:"진행 상황",discussion:"일반 의견",use:"직접 사용해보기 ↗",reviewNotice:"실제로 사용한 경험을 바탕으로 작성해 주세요. 리뷰는 각 작품당 한 개까지 남길 수 있습니다.",
@@ -51,7 +51,7 @@ const NAMES = {
     emptyExplain:"Be the first contributor.",search:"Search title or description",category:"All categories",latest:"Newest",popularSort:"Popular",period:"Ranking period",
     today:"24 hours",week:"7 days",month:"30 days",allTime:"All time",noResults:"No matching posts.",loginNeeded:"Please sign in with Google to continue.",
     comment:"Comment",review:"Review",comments:"Comments",reviews:"Star reviews",author:"By",title:"Title",description:"Description",website:"Website URL (https://)",
-    urlHelp:"Enter the real URL of your finished product.",name:"Name",publish:"Publish",save:"Save",cancel:"Cancel",edit:"Edit",delete:"Delete",
+    urlHelp:"Enter the real URL of your finished product.",tagline:"Short promotional tagline",taglineHelp:"Explain your product’s best benefit in a sentence.",highlights:"Key benefits and features",highlightsHelp:"List one feature per line.",photos:"Product screenshots and photos",photosHelp:"Up to 5 photos · 5MB each · JPG / PNG / WEBP · first image is the cover",removePhoto:"Remove",photoMax:"Select up to 5 images.",photoType:"Only JPG, PNG or WEBP images are supported.",photoSize:"Each photo must be no larger than 5MB.",features:"Key benefits and features",promoDescription:"Product description",name:"Name",publish:"Publish",save:"Save",cancel:"Cancel",edit:"Edit",delete:"Delete",
     confirmDelete:"Delete this item permanently?",details:"View details",vote:"I need this",up:"Upvote",down:"Downvote",
     join:"Join as maker",leave:"Leave build",participants:"Builders joined",status:"Status",open:"Requested",building:"Building",completed:"Completed",
     progress:"Progress update",discussion:"General comment",use:"Try this product ↗",reviewNotice:"Only share reviews based on your personal use. One review per person per product.",
@@ -74,7 +74,7 @@ const state = {
   ready:false, user:null, profile:null, isModerator:false, reports:[], error:"",
   requests:[], products:[], profiles:[],participations:[], reqMetrics:[], productMetrics:[],
   userReqVotes:[],userProductVotes:[],comments:[],reviews:[],
-  search:"",category:"all",order:"popular",period:"all"
+  search:"",category:"all",order:"popular",period:"all",gallery:{keep:[],newFiles:[],previews:[]}
 };
 const $ = (sel) => document.querySelector(sel);
 const tr = (key) => NAMES[state.lang][key] || key;
@@ -112,6 +112,73 @@ function filters(){return '<div class="toolbar"><input id="q" aria-label="'+tr("
 function filtered(rows,type){const q=state.search.toLocaleLowerCase();return rows.filter(x=>(state.category==="all"||x.category===state.category)&&
   (x.title+" "+x.description).toLocaleLowerCase().includes(q)).sort((a,b)=>state.order==="latest"?Date.parse(b.created_at)-Date.parse(a.created_at):
   metric(type,b.id)-metric(type,a.id)||Date.parse(b.created_at)-Date.parse(a.created_at));}
+
+const MEDIA_BUCKET="product-media";
+const IMAGE_TYPES={"image/jpeg":"jpg","image/png":"png","image/webp":"webp"};
+const MAX_IMAGE_BYTES=5*1024*1024;
+function photoUrl(path){
+ if(!db||typeof path!=="string"||!/^[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp)$/i.test(path))return "";
+ return db.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+function coverUrl(product){
+ const path=Array.isArray(product?.image_paths)?product.image_paths[0]:null;
+ return path?photoUrl(path):"";
+}
+function productHighlights(product){
+ const lines=String(product.highlights||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean).slice(0,8);
+ return lines.length?'<div class="detail-highlights"><h3>✨ '+tr("features")+'</h3><ul>'+
+ lines.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul></div>':"";
+}
+function productGallery(product){
+ const paths=Array.isArray(product.image_paths)?product.image_paths:[];
+ const valid=paths.map(photoUrl).filter(Boolean);
+ if(!valid.length)return "";
+ return '<div class="product-showroom"><img class="detail-cover" src="'+esc(valid[0])+'" alt="'+esc(product.title)+'" loading="eager">'+
+ (valid.length>1?'<div class="media-gallery">'+valid.map((url,i)=>'<a class="media-photo" target="_blank" rel="noopener noreferrer" href="'+esc(url)+'" title="'+tr("photos")+' '+(i+1)+'"><img loading="lazy" alt="'+esc(product.title)+' '+(i+1)+'" src="'+esc(url)+'"></a>').join("")+'</div>':"")+
+ '</div>';
+}
+function releasePhotoPreviews(){
+ for(const url of state.gallery.previews||[])try{URL.revokeObjectURL(url);}catch(e){}
+ state.gallery.previews=[];
+}
+function updatePhotoPreviews(){
+ const slot=$("#photoPreview");if(!slot)return;
+ releasePhotoPreviews();
+ const old=state.gallery.keep.map((path,i)=>({src:photoUrl(path),source:"keep",index:i,name:(i===0?"⭐ ":"")+tr("photos")+" "+(i+1)}));
+ const incoming=state.gallery.newFiles.map((file,i)=>{
+  const src=URL.createObjectURL(file);state.gallery.previews.push(src);
+  return {src,source:"new",index:i,name:file.name};
+ });
+ slot.innerHTML=[...old,...incoming].map(p=>'<div class="photo-preview-item"><img src="'+esc(p.src)+'" alt="'+esc(p.name)+'"><small>'+esc(p.name)+'</small>'+
+ '<button type="button" data-action="remove-photo" data-source="'+p.source+'" data-index="'+p.index+'">'+tr("removePhoto")+'</button></div>').join("");
+ const caption=$("#photoCount");if(caption)caption.textContent=(old.length+incoming.length)+"/5";
+}
+function selectedPhotos(files){
+ const arr=Array.from(files||[]);
+ if(state.gallery.keep.length+state.gallery.newFiles.length+arr.length>5)return toast(tr("photoMax"));
+ for(const file of arr){
+  if(!IMAGE_TYPES[file.type])return toast(tr("photoType"));
+  if(file.size>MAX_IMAGE_BYTES||!file.size)return toast(tr("photoSize"));
+ }
+ state.gallery.newFiles.push(...arr);updatePhotoPreviews();
+}
+async function uploadPhotos(productId){
+ const uploaded=[];
+ try{
+  for(const file of state.gallery.newFiles){
+   const ext=IMAGE_TYPES[file.type];
+   if(!ext||file.size>MAX_IMAGE_BYTES||file.size<1)throw Error(tr("photoType"));
+   const path=state.user.id+"/"+productId+"/"+crypto.randomUUID()+"."+ext;
+   const response=await db.storage.from(MEDIA_BUCKET).upload(path,file,{contentType:file.type,cacheControl:"3600",upsert:false});
+   ensure(response);uploaded.push(path);
+  }
+  return uploaded;
+ }catch(error){
+  if(uploaded.length)try{await db.storage.from(MEDIA_BUCKET).remove(uploaded);}catch(e){console.warn("Media cleanup",e);}
+  throw error;
+ }
+}
+
 function card(a,type){const req=type==="request";const m=counts(type,a.id);const voteText=req?tr("vote"):tr("up");const commentCount=state.comments.filter(x=>req?x.request_id===a.id:x.product_id===a.id).length;
  return '<article class="item"><button class="itemBody" data-action="detail" data-kind="'+type+'" data-id="'+esc(a.id)+'">'+
   '<div class="itemHead"><span class="pill">'+cc(a.category)+'</span><span class="hint">'+date(a.created_at)+'</span></div>'+
