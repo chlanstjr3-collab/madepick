@@ -179,14 +179,20 @@ async function uploadPhotos(productId){
  }
 }
 
-function card(a,type){const req=type==="request";const m=counts(type,a.id);const voteText=req?tr("vote"):tr("up");const commentCount=state.comments.filter(x=>req?x.request_id===a.id:x.product_id===a.id).length;
+function card(a,type){
+ const req=type==="request",m=counts(type,a.id);
+ const commentCount=state.comments.filter(x=>req?x.request_id===a.id:x.product_id===a.id).length;
+ const thumbnail=!req?coverUrl(a):"";
+ const teaser=!req&&a.tagline?a.tagline:a.description.slice(0,135);
  return '<article class="item"><button class="itemBody" data-action="detail" data-kind="'+type+'" data-id="'+esc(a.id)+'">'+
+  (thumbnail?'<img class="product-cover" loading="lazy" src="'+esc(thumbnail)+'" alt="'+esc(a.title)+'">':"")+
   '<div class="itemHead"><span class="pill">'+cc(a.category)+'</span><span class="hint">'+date(a.created_at)+'</span></div>'+
-  '<h3>'+esc(a.title)+'</h3><p>'+esc(a.description.slice(0,135))+(a.description.length>135?"…":"")+'</p></button>'+
+  '<h3>'+esc(a.title)+'</h3><p>'+esc(teaser)+(teaser===a.description.slice(0,135)&&a.description.length>135?"…":"")+'</p></button>'+
   '<div class="itemBottom"><span class="hint">'+esc(who(a.owner_id))+'</span><div class="row"><span class="counter">↑ '+val(m,"total")+'</span>'+
   (!req&&val(m,"review_count")?'<span class="counter">★ '+val(m,"rating").toFixed(1)+'</span>':"")+
   '<button class="btn tiny alt" data-action="detail" data-kind="'+type+'" data-id="'+esc(a.id)+'">'+tr("details")+
-  (commentCount?" · 💬 "+commentCount:"")+'</button></div></div></article>';}
+  (commentCount?" · 💬 "+commentCount:"")+'</button></div></div></article>';
+}
 function listBlock(type,items){return items.length?'<div class="cards">'+items.map(x=>card(x,type)).join("")+'</div>':zero(type);}
 function home(){const requests=state.requests.slice().sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)).slice(0,2);
  const products=state.products.slice().sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)).slice(0,2);
@@ -250,7 +256,11 @@ function details(type,id){const req=type==="request";const a=(req?state.requests
  const pStatus=req?'<span class="badge">'+tr(a.status)+'</span>':"";
  return '<div class="wrap content"><button class="back" data-action="go" data-path="'+(req?"requests":"showcase")+'">← '+tr("back")+'</button>'+
  '<article class="detail"><div class="row"><span class="pill">'+cc(a.category)+'</span>'+pStatus+'<span class="hint">'+date(a.created_at)+' · '+esc(who(a.owner_id))+'</span></div>'+
- '<h1>'+esc(a.title)+'</h1><p>'+esc(a.description)+'</p>'+
+ '<h1>'+esc(a.title)+'</h1>'+
+ (!req&&a.tagline?'<p class="detail-tagline">'+esc(a.tagline)+'</p>':"")+
+ (!req?productGallery(a):"")+
+ '<h3>'+(!req?tr("promoDescription"):tr("description"))+'</h3><p>'+esc(a.description)+'</p>'+
+ (!req?productHighlights(a):"")+
  (!req&&a.request_id?'<p class="hint">'+tr("linked")+': <button class="ghost" data-action="detail" data-kind="request" data-id="'+esc(a.request_id)+'">'+esc(state.requests.find(x=>x.id===a.request_id)?.title||tr("request"))+'</button></p>':"")+
  '<div class="detailbar"><div class="detailActions">'+
  (req?'<button class="counter '+(userVote?"active":"")+'" data-action="vote" data-kind="request" data-id="'+id+'" data-value="1">↑ '+tr("vote")+' '+val(m,"total")+'</button>'+
