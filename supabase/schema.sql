@@ -100,7 +100,7 @@ create or replace function public.is_moderator()
 returns boolean language sql stable security definer set search_path = ''
 as $$ select exists(select 1 from public.moderators where user_id = (select auth.uid())) $$;
 revoke all on function public.is_moderator() from public;
-grant execute on function public.is_moderator() to authenticated;
+grant execute on function public.is_moderator() to anon, authenticated;
 
 create or replace function public.touch_updated_at()
 returns trigger language plpgsql set search_path=''
@@ -208,7 +208,9 @@ create policy "product votes own delete" on public.product_votes for delete to a
 
 create policy "comments public read" on public.comments for select to anon,authenticated using(true);
 create policy "comments own insert" on public.comments for insert to authenticated
-  with check(author_id=(select auth.uid()));
+  with check(author_id=(select auth.uid()) and
+    (kind='discussion' or (request_id is not null and exists
+      (select 1 from public.build_participations b where b.request_id=request_id and b.user_id=(select auth.uid())))));
 create policy "comments own update" on public.comments for update to authenticated
   using(author_id=(select auth.uid()) or public.is_moderator())
   with check(author_id=(select auth.uid()) or public.is_moderator());
@@ -221,7 +223,9 @@ create policy "reviews own insert, not own product" on public.reviews for insert
     (select 1 from public.products p where p.id=product_id and p.owner_id <> (select auth.uid())));
 create policy "reviews own update" on public.reviews for update to authenticated
   using(author_id=(select auth.uid()) or public.is_moderator())
-  with check(author_id=(select auth.uid()) or public.is_moderator());
+  with check((author_id=(select auth.uid()) and exists
+    (select 1 from public.products p where p.id=product_id and p.owner_id<>(select auth.uid())))
+    or public.is_moderator());
 create policy "reviews own delete" on public.reviews for delete to authenticated
   using(author_id=(select auth.uid()) or public.is_moderator());
 
