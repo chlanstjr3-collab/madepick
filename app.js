@@ -366,18 +366,28 @@ async function google(){if(!configured)return toast(tr("connect"));const {error}
  provider:"google",options:{redirectTo:location.origin+location.pathname}
 });if(error)showError(error);}
 function modal(html){$("#dialogBody").innerHTML=html;$("#editor").showModal();}
-function editForm(type,a){if(!requireLogin())return;const req=type==="request";const own=a&&a.owner_id===state.user.id;
- if(a&&!own)return;
+function editForm(type,a){
+ if(!requireLogin())return;
+ const req=type==="request";if(a&&a.owner_id!==state.user.id)return;
+ releasePhotoPreviews();
+ state.gallery.keep=Array.isArray(a?.image_paths)?a.image_paths.slice():[];
+ state.gallery.newFiles=[];
  const choices=state.requests.filter(x=>x.owner_id===state.user.id||state.participations.some(p=>p.request_id===x.id&&p.user_id===state.user.id));
  modal('<h2>'+tr(a?"edit":req?"submitIdea":"submitProduct")+'</h2><p class="muted">'+tr(req?"rdesc":"sdesc")+'</p>'+
  '<form id="postForm" class="form" data-kind="'+type+'" data-edit="'+(a?.id||"")+'">'+
  '<label>'+tr("title")+'<input name="title" required minlength="'+(req?3:2)+'" maxlength="120" value="'+esc(a?.title||"")+'"></label>'+
- '<label>'+tr("description")+'<textarea name="description" required minlength="10" maxlength="4000">'+esc(a?.description||"")+'</textarea></label>'+
+ (!req?'<label>'+tr("tagline")+'<input name="tagline" maxlength="160" placeholder="'+tr("taglineHelp")+'" value="'+esc(a?.tagline||"")+'"></label>':"")+
+ '<label>'+tr(req?"description":"promoDescription")+'<textarea name="description" required minlength="10" maxlength="4000">'+esc(a?.description||"")+'</textarea></label>'+
+ (!req?'<label>'+tr("highlights")+'<textarea name="highlights" maxlength="1500" placeholder="'+tr("highlightsHelp")+'">'+esc(a?.highlights||"")+'</textarea></label>':"")+
  '<label>'+tr("category")+'<select name="category">'+CATS.slice(1).map(x=>'<option value="'+x+'" '+((a?.category||"other")===x?"selected":"")+'>'+cc(x)+'</option>').join("")+'</select></label>'+
  (!req?'<label>'+tr("website")+'<input name="url" type="url" required maxlength="1900" placeholder="https://" value="'+esc(a?.url||"")+'"><small>'+tr("urlHelp")+'</small></label>'+
  '<label>'+tr("linkRequest")+'<select name="request_id"><option value="">'+tr("none")+'</option>'+choices.map(r=>
- '<option value="'+r.id+'" '+(a?.request_id===r.id?"selected":"")+'>'+esc(r.title)+'</option>').join("")+'</select></label>':"")+
+ '<option value="'+r.id+'" '+(a?.request_id===r.id?"selected":"")+'>'+esc(r.title)+'</option>').join("")+'</select></label>'+
+ '<label>'+tr("photos")+' <span id="photoCount" class="photo-count">0/5</span>'+
+ '<input id="photoInput" name="photoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple><small class="photo-hint">'+tr("photosHelp")+'</small></label>'+
+ '<div class="photo-preview" id="photoPreview"></div>':"")+
  '<div class="formActions"><button type="button" class="btn alt" data-action="close">'+tr("cancel")+'</button><button class="btn" type="submit">'+tr("save")+'</button></div></form>');
+ if(!req)updatePhotoPreviews();
 }
 function editComment(id){if(!requireLogin())return;const c=state.comments.find(x=>x.id===id);if(!c||c.author_id!==state.user.id)return;
  modal('<h2>'+tr("edit")+'</h2><form id="editCommentForm" class="form" data-id="'+id+'"><label>'+tr("body")+
