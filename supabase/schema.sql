@@ -88,6 +88,9 @@ create table if not exists public.reports (
   target_kind text not null check (target_kind in ('request','product','comment','review')),
   target_id uuid not null,
   reason text not null check (char_length(trim(reason)) between 5 and 500),
+  status text not null default 'pending' check (status in ('pending','resolved')),
+  resolved_at timestamptz,
+  resolved_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   unique(reporter_id,target_kind,target_id)
 );
@@ -246,11 +249,14 @@ create policy "reviews own delete" on public.reviews for delete to authenticated
   using(author_id=(select auth.uid()) or public.is_moderator());
 
 create policy "reports own submit" on public.reports for insert to authenticated
-  with check(reporter_id=(select auth.uid()));
+  with check(reporter_id=(select auth.uid()) and status='pending'
+    and resolved_at is null and resolved_by is null);
 create policy "reports owner or moderator read" on public.reports for select to authenticated
   using(reporter_id=(select auth.uid()) or public.is_moderator());
 create policy "reports moderator delete" on public.reports for delete to authenticated
   using(public.is_moderator());
+create policy "reports moderator resolve" on public.reports for update to authenticated
+  using(public.is_moderator()) with check(public.is_moderator());
 
 create policy "moderator own membership read" on public.moderators for select to authenticated
   using(user_id=(select auth.uid()));
@@ -307,7 +313,7 @@ grant select on public.profiles,public.requests,public.products,public.build_par
 grant select,insert,update,delete on public.profiles,public.requests,public.products,
   public.build_participations,public.request_votes,public.product_votes,
   public.comments,public.reviews to authenticated;
-grant select,insert on public.reports to authenticated;
+grant select,insert,update on public.reports to authenticated;
 grant select on public.moderators to authenticated;
 
 
