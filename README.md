@@ -12,7 +12,8 @@ MadePick is a Korean/English community for requesting useful digital products, v
 - Google OAuth login via Supabase, public viewing, user profile and display-name edit
 - Requests with upvotes, comments and status (requested/building/completed)
 - Volunteer maker participation and progress updates in request discussion
-- Product submissions with actual HTTPS outbound links and request association
+- Product submissions with HTTPS outbound links, promotional tagline, detailed introduction and features, and optional association with a requested idea
+- Up to five screenshots/photos per product, with the first image used as the cover; authenticated owner-only uploads/removals via Supabase Storage
 - Product upvotes/downvotes, 1-5 star reviews and regular comments
 - Edit/delete your own items, report problematic posts
 - Search and filtering, daily/weekly/monthly/all-time vote-based rankings
@@ -22,7 +23,7 @@ MadePick is a Korean/English community for requesting useful digital products, v
 
 ## What is not yet activated
 
-A Supabase project needs to be connected before Google login and shared multi-user data can work. The connection keys in config.js are intentionally blank. Google OAuth must be enabled and the SQL migration applied to your own Supabase project. **The site is publicly deployed, but its real account/data features are not yet operational.**
+A Supabase project needs to be connected before Google login, shared multi-user data, and image uploads can work. The connection keys in config.js are intentionally blank. Google OAuth must be enabled and the SQL migration applied to your own Supabase project. **The site is publicly deployed, but its real account/data features are not yet operational.**
 
 **Setup instructions:** [SETUP.md](./SETUP.md)  
 **Database migration:** [supabase/schema.sql](./supabase/schema.sql)  
