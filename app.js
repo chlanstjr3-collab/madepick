@@ -177,7 +177,8 @@ function details(type,id){const req=type==="request";const a=(req?state.requests
  if(!a)return '<div class="wrap content"><button class="back" data-action="go" data-path="'+(req?"requests":"showcase")+'">← '+tr("back")+'</button><div class="empty">'+tr("noData")+'</div></div>';
  const mine=state.user?.id===a.owner_id;const m=counts(type,id);
  const userVote=req?state.userReqVotes.some(x=>x.request_id===id):state.userProductVotes.find(x=>x.product_id===id)?.value||0;
- const participated=state.participations.some(x=>x.request_id===id&&x.user_id===state.user?.id);
+ const myParticipation=state.participations.find(x=>x.request_id===id&&x.user_id===state.user?.id);
+ const participated=!!myParticipation;
  const related=req?state.products.filter(x=>x.request_id===id):[];
  const pStatus=req?'<span class="badge">'+tr(a.status)+'</span>':"";
  return '<div class="wrap content"><button class="back" data-action="go" data-path="'+(req?"requests":"showcase")+'">← '+tr("back")+'</button>'+
@@ -199,7 +200,8 @@ function details(type,id){const req=type==="request";const a=(req?state.requests
  (req&&related.length?'<section class="section"><h2>'+tr("linked")+'</h2>'+listBlock("product",related)+'</section>':"")+
  (req?'<div class="notice info">'+tr("builderNote")+'</div>':"")+
  '<section class="discussion">'+showComments(type,id)+(req?'<div class="pane"><h2>🛠️ '+tr("participants")+'</h2>'+
- (state.participations.filter(x=>x.request_id===id).map(x=>'<div class="comment">'+esc(who(x.user_id))+' · <span class="badge">'+tr(x.status)+'</span></div>').join("")||'<p class="muted">0</p>')+'</div>':showReviews(a))+'</section></div>';
+ (state.participations.filter(x=>x.request_id===id).map(x=>'<div class="comment"><div class="row space"><span>'+esc(who(x.user_id))+'</span>'+
+ (x.user_id===state.user?.id?'<select aria-label="'+tr("status")+'" data-build-status="'+id+'"><option value="building" '+(x.status==="building"?"selected":"")+'>'+tr("building")+'</option><option value="completed" '+(x.status==="completed"?"selected":"")+'>'+tr("completed")+'</option></select>':'<span class="badge">'+tr(x.status)+'</span>')+'</div></div>').join("")||'<p class="muted">0</p>')+'</div>':showReviews(a))+'</section></div>';
 }
 function profilePage(){if(!state.user)return '<div class="wrap content"><div class="notice info">'+tr("loginPrompt")+'</div><button class="btn" data-action="login">'+tr("signIn")+'</button></div>';
  const id=state.user.id;return '<div class="wrap content">'+topSection(tr("yourProfile"),state.user.email||"",null)+
@@ -345,6 +347,10 @@ document.addEventListener("change",async e=>{
  if(e.target.id==="cat"||e.target.id==="order"||e.target.id==="period"){
  state.category=$("#cat").value;state.order=$("#order").value;state.period=$("#period").value;const slot=$("#listingResults");
  if(slot)slot.innerHTML=page().name==="rankings"?rankings():listResults(page().name==="showcase"?"product":"request");
+ }
+ if(e.target.matches("[data-build-status]")){
+ if(!requireLogin())return;const id=e.target.dataset.buildStatus,status=e.target.value;
+ try{ensure(await db.from("build_participations").update({status}).eq("request_id",id).eq("user_id",state.user.id));await fetchData();toast(tr("saved"));}catch(err){showError(err);}return;
  }
  if(e.target.matches("[data-request-status]")){
  if(!requireLogin())return;const id=e.target.dataset.requestStatus, status=e.target.value;
