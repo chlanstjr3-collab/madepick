@@ -210,7 +210,7 @@ create policy "comments public read" on public.comments for select to anon,authe
 create policy "comments own insert" on public.comments for insert to authenticated
   with check(author_id=(select auth.uid()) and
     (kind='discussion' or (request_id is not null and exists
-      (select 1 from public.build_participations b where b.request_id=request_id and b.user_id=(select auth.uid())))));
+      (select 1 from public.build_participations b where b.request_id=comments.request_id and b.user_id=(select auth.uid())))));
 create policy "comments own update" on public.comments for update to authenticated
   using(author_id=(select auth.uid()) or public.is_moderator())
   with check(author_id=(select auth.uid()) or public.is_moderator());
