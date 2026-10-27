@@ -9,7 +9,7 @@ const req="11111111-1111-4111-8111-111111111111";
 const prod="22222222-2222-4222-8222-222222222222";
 const sample={
  requests:[{id:req,owner_id:requester,title:"Test request",description:"A genuine user submitted request for an app",category:"ai",status:"open",created_at:"2026-10-27T00:00:00Z"}],
- products:[{id:prod,owner_id:maker,request_id:req,title:"Test actual link",description:"<script>unsafe XSS sample</script>",category:"productivity",url:"https://example.org",created_at:"2026-10-27T00:00:00Z"}],
+ products:[{id:prod,owner_id:maker,request_id:req,title:"Test actual link",description:"<script>unsafe XSS sample</script>",tagline:"Build faster with user feedback",highlights:"Share your app\nCollect real feedback",image_paths:[maker+"/"+prod+"/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg",maker+"/"+prod+"/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.webp"],category:"productivity",url:"https://example.org",created_at:"2026-10-27T00:00:00Z"}],
  profiles:[{id:requester,display_name:"Requester"},{id:maker,display_name:"Maker"}],
  build_participations:[{user_id:maker,request_id:req,status:"building"}],
  request_metrics:[{request_id:req,total:2,day:1,week:2,month:2}],
@@ -26,7 +26,7 @@ const listeners={},elements=new Map();
 function e(id){if(!elements.has(id))elements.set(id,{innerHTML:"",textContent:"",hidden:false,style:{},value:"",
  addEventListener(){},close(){},showModal(){}});return elements.get(id);}
 const browser={
- createClient(){return {auth:{async getUser(){return {data:{user:null}};},onAuthStateChange(){}},from:table};},
+ createClient(){return {auth:{async getUser(){return {data:{user:null}};},onAuthStateChange(){}},from:table,storage:{from:()=>({getPublicUrl:(path)=>({data:{publicUrl:"https://demo.supabase.co/storage/v1/object/public/product-media/"+path}})})}};},
  window:{MADEPICK_CONFIG:{supabaseUrl:"https://demo.supabase.co",supabaseAnonKey:"publishable-only"},addEventListener(k,cb){listeners[k]=cb;},scrollTo(){}},
  document:{documentElement:{lang:"ko"},title:"",querySelector:e,addEventListener(){}},
  location:{hash:"#/home",origin:"https://chlanstjr3-collab.github.io",pathname:"/madepick/"},
@@ -45,6 +45,11 @@ browser.location.hash="#/product/"+prod;listeners.hashchange();
 h=e("#app").innerHTML;
 assert.match(h,/Worked well for me/);
 assert.match(h,/https:\/\/example.org/);
+assert.match(h,/Build faster with user feedback/);
+assert.match(h,/Share your app/);
+assert.match(h,/product-showroom/);
+assert.match(h,/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg/);
+assert.match(h,/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.webp/);
 assert.ok(h.includes("&lt;script&gt;"),"description must be HTML-escaped");
 assert.ok(!h.includes("<script>unsafe"),"raw scripts must not be injected");
 console.log("MadePick connected-data browser-shell smoke test OK");
