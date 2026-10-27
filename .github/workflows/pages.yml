@@ -23,6 +23,8 @@ jobs:
         run: node --check app.js
       - name: Smoke test app without Supabase credentials
         run: node tests/smoke.mjs
+      - name: Smoke test rendered request and product details
+        run: node tests/connected-smoke.mjs
       - name: Prepare public site
         run: |
           mkdir -p site
