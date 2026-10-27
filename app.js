@@ -395,14 +395,38 @@ function editComment(id){if(!requireLogin())return;const c=state.comments.find(x
 }
 async function act(run){if(!requireLogin())return;try{await run();await fetchData();toast(tr("saved"));}catch(e){showError(e);}}
 function ensure(result){if(result.error)throw result.error;return result.data;}
-async function savePost(form){if(!requireLogin())return;const data=new FormData(form),type=form.dataset.kind,req=type==="request",edit=form.dataset.edit;
+async function savePost(form){
+ if(!requireLogin())return;
+ const data=new FormData(form),type=form.dataset.kind,req=type==="request",edit=form.dataset.edit;
  const title=String(data.get("title")||"").trim(),description=String(data.get("description")||"").trim(),category=String(data.get("category")||"other");
  if(title.length<(req?3:2)||title.length>120||description.length<10||description.length>4000)throw Error(tr("failed"));
  const row={title,description,category};
- if(!req){const url=String(data.get("url")||"").trim();let parsed;try{parsed=new URL(url);if(parsed.protocol!=="https:")throw Error();}catch(e){throw Error(tr("invalidUrl"));}row.url=parsed.href;row.request_id=data.get("request_id")||null;}
- const table=req?"requests":"products";
- if(edit)ensure(await db.from(table).update(row).eq("id",edit).eq("owner_id",state.user.id));
- else ensure(await db.from(table).insert({...row,owner_id:state.user.id}));
+ let id=edit||"",uploaded=[],removed=[];
+ if(!req){
+  const url=String(data.get("url")||"").trim();let parsed;
+  try{parsed=new URL(url);if(parsed.protocol!=="https:")throw Error();}catch(e){throw Error(tr("invalidUrl"));}
+  row.url=parsed.href;
+  row.request_id=data.get("request_id")||null;
+  row.tagline=String(data.get("tagline")||"").trim();
+  row.highlights=String(data.get("highlights")||"").trim();
+  if(row.tagline.length>160||row.highlights.length>1500)throw Error(tr("failed"));
+  if(state.gallery.keep.length+state.gallery.newFiles.length>5)throw Error(tr("photoMax"));
+  id=id||crypto.randomUUID();
+  const old=edit?state.products.find(x=>x.id===id)?.image_paths||[]:[];
+  removed=old.filter(x=>!state.gallery.keep.includes(x));
+  uploaded=await uploadPhotos(id);
+  row.image_paths=[...state.gallery.keep,...uploaded];
+ }
+ try{
+  const table=req?"requests":"products";
+  if(edit)ensure(await db.from(table).update(row).eq("id",edit).eq("owner_id",state.user.id));
+  else ensure(await db.from(table).insert({...row,owner_id:state.user.id,...(req?{}:{id})}));
+ }catch(e){
+  if(uploaded.length)try{await db.storage.from(MEDIA_BUCKET).remove(uploaded);}catch(cleanupError){console.warn(cleanupError);}
+  throw e;
+ }
+ if(removed.length)try{await db.storage.from(MEDIA_BUCKET).remove(removed);}catch(e){console.warn("Could not remove unlinked media",e);}
+ releasePhotoPreviews();state.gallery.keep=[];state.gallery.newFiles=[];
  $("#editor").close();await fetchData();toast(tr("saved"));go(req?"requests":"showcase");
 }
 async function saveComment(form){if(!requireLogin())return;const data=new FormData(form),body=String(data.get("body")||"").trim();
