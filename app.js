@@ -86,13 +86,13 @@ const toast = (txt) => {const el=$("#toast");el.textContent=txt;el.hidden=false;
 const showError = (e) => {console.error(e);toast(e && e.message ? e.message :tr("failed"));};
 const counts = (type,id) => type==="request" ? state.reqMetrics.find(x=>x.request_id===id) || {} : state.productMetrics.find(x=>x.product_id===id) || {};
 const val = (x,k) => Number(x?.[k] || 0);
-function metric(type,id){const m=counts(type,id);return val(m,state.period);}
+function metric(type,id){const m=counts(type,id);return val(m,state.period==="all"?"total":state.period);}
 function page(){const parts=location.hash.replace(/^#\/?/,"").split("/");return {name:parts[0]||"home",id:parts[1]||""};}
 function go(path){location.hash="#/"+path; if(page().name===path.split("/")[0])render(); window.scrollTo(0,0);}
 function navigate(name){state.search="";state.category="all";state.order="popular";state.period="all";go(name);}
 
 function nav(){const p=page();const tabs=["home","requests","build","showcase","rankings"];
-  $("#topnav").innerHTML=tabs.map(x=>'<button data-action="go" data-path="'+x+'" class="'+((p.name===x||p.name==="request"&&(x==="requests"||x==="build")&&false||p.name==="product"&&x==="showcase")?"active":"")+'">'+esc(tr(x))+'</button>').join("");
+  $("#topnav").innerHTML=tabs.map(x=>'<button data-action="go" data-path="'+x+'" class="'+((p.name===x||p.name==="product"&&x==="showcase")?"active":"")+'">'+esc(tr(x))+'</button>').join("");
   $("#mobileNav").innerHTML=["home","requests","build","showcase"].map((x,i)=>'<button class="'+(p.name===x?"active":"")+'" data-action="go" data-path="'+x+'">'+["⌂ ","💡 ","🛠 ","🚀 "][i]+esc(tr(x))+'</button>').join("");
   $("#authzone").innerHTML = '<button class="ghost" data-action="lang">'+(state.lang==="ko"?"EN":"KO")+' 🌐</button>'+
   (state.user?'<button class="ghost" data-action="go" data-path="profile">👤 '+esc(state.profile?.display_name||tr("profile"))+'</button><button class="btn tiny alt" data-action="logout">'+tr("signOut")+'</button>':
@@ -161,6 +161,7 @@ function showComments(type,id){const cs=state.comments.filter(x=>type==="request
 }
 function showReviews(product){const m=counts("product",product.id);const reviews=state.reviews.filter(x=>x.product_id===product.id).sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at));
  const own=reviews.find(x=>x.author_id===state.user?.id);
+ state.selectedStars=own?own.rating:5;
  return '<div class="pane"><h2>⭐ '+tr("reviews")+' ('+reviews.length+')</h2><div class="rating"><strong>'+val(m,"rating").toFixed(1)+'</strong> '+stars(val(m,"rating"),false)+'<span>'+val(m,"review_count")+'</span></div>'+
  (reviews.length?reviews.map(r=>'<div class="comment"><div class="row space"><b>'+esc(who(r.author_id))+'</b><small>'+date(r.created_at)+'</small></div>'+
  stars(r.rating,false)+'<p>'+esc(r.body)+'</p><div class="row">'+(state.user?.id===r.author_id?'<button class="ghost" data-action="delete" data-kind="review" data-id="'+r.id+'">'+tr("delete")+'</button>':"")+
@@ -222,7 +223,6 @@ function render(){document.documentElement.lang=state.lang;nav();const p=page();
 }
 async function fetchData(){if(!db){state.ready=true;render();return;}
  state.ready=false;render();
- const get=(t,q)=>q||db.from(t).select("*");
  try{
  const queries=await Promise.all([
  db.from("requests").select("*").eq("visibility","published").order("created_at",{ascending:false}).limit(250),
