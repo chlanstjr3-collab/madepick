@@ -451,7 +451,9 @@ async function join(id){await act(async()=>{const own=state.participations.find(
  if(own)ensure(await db.from("build_participations").delete().eq("request_id",id).eq("user_id",state.user.id));
  else ensure(await db.from("build_participations").insert({request_id:id,user_id:state.user.id}));});}
 async function remove(kind,id){if(!requireLogin()||!confirm(tr("confirmDelete")))return;const map={request:"requests",product:"products",comment:"comments",review:"reviews"};const table=map[kind];if(!table)return;
+ const images=kind==="product"?state.products.find(x=>x.id===id)?.image_paths||[]:[];
  await act(async()=>{ensure(await db.from(table).delete().eq("id",id).eq(kind==="comment"||kind==="review"?"author_id":"owner_id",state.user.id));});
+ if(images.length)try{await db.storage.from(MEDIA_BUCKET).remove(images);}catch(e){console.warn("Photo cleanup",e);}
  const p=page();if(p.name===kind&&p.id===id)go(kind==="request"?"requests":"showcase");}
 async function report(kind,id){if(!requireLogin())return;const reason=prompt(tr("reportReason"));if(reason===null)return;
  if(reason.trim().length<5||reason.length>500)return toast(tr("reportReason"));
@@ -467,7 +469,14 @@ async function handleClick(event){const target=event.target.closest("[data-actio
  if(a==="new")return editForm(kind,null);
  if(a==="edit")return editForm(kind,(kind==="request"?state.requests:state.products).find(x=>x.id===id));
  if(a==="edit-comment")return editComment(id);
- if(a==="close"){return $("#editor").close();}
+ if(a==="close"){releasePhotoPreviews();return $("#editor").close();}
+ if(a==="remove-photo"){
+  const index=Number(target.dataset.index),source=target.dataset.source;
+  if(!Number.isInteger(index)||index<0)return;
+  if(source==="keep")state.gallery.keep.splice(index,1);
+  else if(source==="new")state.gallery.newFiles.splice(index,1);
+  updatePhotoPreviews();return;
+ }
  if(a==="stars"){state.selectedStars=Number(target.dataset.value);$("#reviewForm .stars").innerHTML=stars(state.selectedStars,true).replace(/^<div class="stars"[^>]*>|<\/div>$/g,"");return;}
  if(a==="vote")return vote(kind,id,Number(target.dataset.value));
  if(a==="join")return join(id);
@@ -491,6 +500,7 @@ document.addEventListener("click",handleClick);
 document.addEventListener("submit",handleSubmit);
 document.addEventListener("input",e=>{if(e.target.id==="q"){state.search=e.target.value;const slot=$("#listingResults");if(slot)slot.innerHTML=page().name==="rankings"?rankings():listResults(page().name==="showcase"?"product":"request");}});
 document.addEventListener("change",async e=>{
+ if(e.target.id==="photoInput"){selectedPhotos(e.target.files);e.target.value="";return;}
  if(e.target.id==="cat"||e.target.id==="order"||e.target.id==="period"){
  state.category=$("#cat").value;state.order=$("#order").value;state.period=$("#period").value;const slot=$("#listingResults");
  if(slot)slot.innerHTML=page().name==="rankings"?rankings():listResults(page().name==="showcase"?"product":"request");
@@ -503,7 +513,8 @@ document.addEventListener("change",async e=>{
  if(!requireLogin())return;const id=e.target.dataset.requestStatus, status=e.target.value;
  try{ensure(await db.from("requests").update({status}).eq("id",id).eq("owner_id",state.user.id));await fetchData();toast(tr("saved"));}catch(err){showError(err);}}
 });
-$("#closeDialog").addEventListener("click",()=>$("#editor").close());
+$("#closeDialog").addEventListener("click",()=>{releasePhotoPreviews();$("#editor").close();});
+$("#editor").addEventListener("close",releasePhotoPreviews);
 window.addEventListener("hashchange",()=>{state.search="";state.category="all";render();});
 state.selectedStars=5;
 init().catch(e=>{state.error=e?.message||String(e);state.ready=true;render();});
