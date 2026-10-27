@@ -3,29 +3,39 @@
 **요청하고 · 만들어주고 · 전시하고**  
 Request it · Build it · Show it
 
-MadePick is a Korean/English mobile-friendly product discovery and request community prototype.
+**Site:** https://chlanstjr3-collab.github.io/madepick/
 
-## Open the web demo
+MadePick is a Korean/English community for requesting useful digital products, voluntarily building them, and showcasing completed websites/apps. The current public build contains **no fake listings, no fake makers, and no fabricated votes**.
 
-The live-site source is in [index.html](./index.html). No GitHub Codespaces, npm, or installation is required.
+## Features implemented in the source
 
-To publish: open **Settings → Pages** in this repository, choose **GitHub Actions** for the deployment source, and the included workflow will publish the site to the project's GitHub Pages URL.
+- Google OAuth login via Supabase, public viewing, user profile and display-name edit
+- Requests with upvotes, comments and status (requested/building/completed)
+- Volunteer maker participation and progress updates in request discussion
+- Product submissions with actual HTTPS outbound links and request association
+- Product upvotes/downvotes, 1-5 star reviews and regular comments
+- Edit/delete your own items, report problematic posts
+- Search and filtering, daily/weekly/monthly/all-time vote-based rankings
+- Korean/English interface, responsive mobile/desktop UI
+- Supabase SQL migration including RLS and moderator role table
+- Automated GitHub Pages deployment with JavaScript syntax and smoke checks
 
-The expected address *after successful Pages deployment* is:
+## What is not yet activated
 
-https://chlanstjr3-collab.github.io/madepick/
+A Supabase project needs to be connected before Google login and shared multi-user data can work. The connection keys in config.js are intentionally blank. Google OAuth must be enabled and the SQL migration applied to your own Supabase project. **The site is publicly deployed, but its real account/data features are not yet operational.**
 
-## Try the features
+**Setup instructions:** [SETUP.md](./SETUP.md)  
+**Database migration:** [supabase/schema.sql](./supabase/schema.sql)  
+**Moderation:** [DATABASE_AND_MODERATION.md](./DATABASE_AND_MODERATION.md)
 
-- Post a request and press "I need this"
-- Volunteer to build a requested service
-- Showcase a website/app using an HTTPS link
-- Browse and vote for showcased products
-- Sort, filter, search, and switch between Korean and English
-- Designed for mobile and desktop
+## How it's hosted
 
-**Prototype limitation:** Items and votes are saved in **your browser's localStorage only**. They do not sync between users or devices. Sample products are fictional examples and not linked to real services. This build does not have authentication, a database, moderation, or real shared voting.
+The deployable frontend is plain browser HTML/CSS/JavaScript in the repository root. GitHub Actions publishes it to GitHub Pages without Codespaces or a build environment. Supabase provides identity, PostgreSQL data and Row Level Security after connection.
 
-## Next step
+**SEO limitation:** This deployment is a client-side SPA, not a Next.js server-rendered site. Individual request/product URLs use hash routing and are not optimized for search indexing. For production search acquisition, migrate detail pages to server-rendered URLs when the database is connected.
 
-Before opening real public submissions: implement authenticated users, shared database (such as Supabase), abuse prevention, and SEO-indexable public content. The separate Next.js starter zip created in the ChatGPT conversation is an alternate foundation, not the currently deployed GitHub Pages version.
+## What to validate after connecting Supabase
+
+Two-account end-to-end sign-in, request creation, voting, joining builds, comments, reviews, reports, and ownership permissions. Content moderation process, rate-limiting/CAPTCHA, privacy policy, terms, operator contact and SEO must be addressed before a public user-acquisition launch.
+
+No secrets or service_role key should ever be committed to this repository.
