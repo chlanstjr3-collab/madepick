@@ -28,7 +28,10 @@ create table if not exists public.products (
   owner_id uuid not null references public.profiles(id) on delete cascade,
   request_id uuid references public.requests(id) on delete set null,
   title text not null check (char_length(trim(title)) between 2 and 120),
+  tagline text not null default '' check (char_length(tagline) <= 160),
   description text not null check (char_length(trim(description)) between 10 and 4000),
+  highlights text not null default '' check (char_length(highlights) <= 1500),
+  image_paths text[] not null default '{}'::text[] check (cardinality(image_paths) <= 5),
   category text not null default 'other' check (category in ('ai','productivity','finance','game','education','other')),
   url text not null check (char_length(url) < 2000 and url ~* '^https://[^[:space:]/]+'),
   visibility text not null default 'published' check (visibility in ('published','hidden')),
@@ -369,3 +372,67 @@ for each row execute function public.guard_post_frequency();
 
 -- Optional manual moderator assignment AFTER a Google sign-in:
 -- insert into public.moderators(user_id) values ('<auth user uuid>');
+
+-- Public product photography and promotional content. The first image is the cover.
+-- Safe to execute on a newly created or previously migrated project.
+alter table public.products add column if not exists tagline text not null default '';
+alter table public.products add column if not exists highlights text not null default '';
+alter table public.products add column if not exists image_paths text[] not null default '{}'::text[];
+
+create or replace function public.validate_product_media()
+returns trigger language plpgsql set search_path = ''
+as $$
+declare img text;
+begin
+  if cardinality(new.image_paths) > 5 then
+    raise exception 'A product can have at most five images';
+  end if;
+  if length(new.tagline) > 160 or length(new.highlights) > 1500 then
+    raise exception 'Promotional text is too long';
+  end if;
+  foreach img in array new.image_paths loop
+    if img is null or img !~* (
+      '^' || new.owner_id::text || '/' || new.id::text || '/[a-f0-9-]{36}\.(jpg|jpeg|png|webp)$'
+    ) then
+      raise exception 'Image paths must be owned by the product creator';
+    end if;
+  end loop;
+  return new;
+end $$;
+drop trigger if exists validate_product_media_trigger on public.products;
+create trigger validate_product_media_trigger before insert or update on public.products
+for each row execute function public.validate_product_media();
+
+-- Images are public promotional media, not private user uploads.
+-- Private files must NEVER be placed in this bucket.
+insert into storage.buckets (id,name,public,file_size_limit,allowed_mime_types)
+values ('product-media','product-media',true,5242880,ARRAY['image/jpeg','image/png','image/webp'])
+on conflict (id) do update
+  set public=excluded.public,
+      file_size_limit=excluded.file_size_limit,
+      allowed_mime_types=excluded.allowed_mime_types;
+
+drop policy if exists "madepick media owner uploads" on storage.objects;
+create policy "madepick media owner uploads"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id='product-media' and
+  (storage.foldername(name))[1]=(select auth.uid())::text and
+  owner_id=(select auth.uid())::text
+);
+drop policy if exists "madepick media owner reads metadata" on storage.objects;
+create policy "madepick media owner reads metadata"
+on storage.objects for select to authenticated
+using (
+  bucket_id='product-media' and
+  (storage.foldername(name))[1]=(select auth.uid())::text and
+  owner_id=(select auth.uid())::text
+);
+drop policy if exists "madepick media owner deletes" on storage.objects;
+create policy "madepick media owner deletes"
+on storage.objects for delete to authenticated
+using (
+  bucket_id='product-media' and
+  (storage.foldername(name))[1]=(select auth.uid())::text and
+  owner_id=(select auth.uid())::text
+);
